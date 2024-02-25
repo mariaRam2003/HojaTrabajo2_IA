@@ -1,66 +1,90 @@
 import numpy as np
-import gym
-import random
+class FrozenLake:
+    def __init__(self, size=4, num_holes=3, seed=42):
+        self.size = size
+        self.num_holes = num_holes
+        self.seed = seed
+        np.random.seed(self.seed)
+        self.grid = np.zeros((self.size, self.size), dtype=str)
+        self.grid.fill('-')  # Inicialmente llenamos todo el tablero con '-'
+        self.start = (0, 0)
+        self.goal = (self.size - 1, self.size - 1)
+        self.holes = self.generate_holes()
+        self.agent_pos = self.start
+        self.done = False
 
-# Definir la semilla para reproducibilidad
-random.seed(42)
-np.random.seed(42)
+    def generate_holes(self):
+        holes = set()
+        while len(holes) < self.num_holes:
+            x = np.random.randint(0, self.size)
+            y = np.random.randint(0, self.size)
+            if (x, y) != self.start and (x, y) != self.goal:
+                holes.add((x, y))
+        return holes
 
-# Crear el entorno Frozen Lake
-env = gym.make("FrozenLake-v1", map_name="4x4", is_slippery=False)
+    def reset(self):
+        self.agent_pos = self.start
+        self.done = False
+        self.update_grid()
+        return self.agent_pos
 
-# Mostrar la matriz de transición del entorno
-print("Matriz de transición del entorno:")
-print(env.env.P)
+    def update_grid(self):
+        self.grid.fill('-')
+        self.grid[self.goal] = 'G'
+        for hole in self.holes:
+            self.grid[hole] = 'H'
+        self.grid[self.agent_pos] = '@'
 
-# Definir el agente
-class Agent:
-    def __init__(self, env):
-        self.env = env
-        self.V = np.zeros(env.observation_space.n)  # Valores de estado
-        self.policy = np.zeros(env.observation_space.n)  # Política inicial: todas las acciones igualmente probables
+    def step(self, action):
+        if self.done:
+            raise ValueError("Episode has terminated, please reset the environment.")
 
-    def value_iteration(self, gamma=0.9, epsilon=1e-10):
-        # Iteración de valor
-        while True:
-            delta = 0
-            for s in range(env.observation_space.n):
-                v = self.V[s]
-                self.V[s] = max([sum([p*(r + gamma*self.V[s_]) for (p, s_, r, _) in env.env.P[s][a]]) for a in range(env.action_space.n)])
-                delta = max(delta, abs(v - self.V[s]))
-            if delta < epsilon:
-                break
+        x, y = self.agent_pos
 
-    def extract_policy(self, gamma=0.9):
-        # Extraer la política óptima de los valores de estado
-        for s in range(env.observation_space.n):
-            q_values = [sum([p*(r + gamma*self.V[s_]) for (p, s_, r, _) in env.env.P[s][a]]) for a in range(env.action_space.n)]
-            self.policy[s] = np.argmax(q_values)
+        if action == 0:  # Up
+            x = max(0, x - 1)
+        elif action == 1:  # Down
+            x = min(self.size - 1, x + 1)
+        elif action == 2:  # Left
+            y = max(0, y - 1)
+        elif action == 3:  # Right
+            y = min(self.size - 1, y + 1)
+        else:
+            raise ValueError("Invalid action.")
 
-    def play_episodes(self, num_episodes=100):
-        rewards = []
-        for _ in range(num_episodes):
-            state = env.reset()
-            done = False
-            total_reward = 0
-            while not done:
-                action = int(self.policy[state])
-                next_state, reward, done, _ = env.step(action)
-                total_reward += reward
-                state = next_state
-            rewards.append(total_reward)
-        return rewards
+        if (x, y) in self.holes:
+            reward = 0
+            self.done = True
+        elif (x, y) == self.goal:
+            reward = 1
+            self.done = True
+        else:
+            reward = 0
 
-# Crear un agente
-agent = Agent(env)
+        self.agent_pos = (x, y)
+        self.update_grid()
+        return self.agent_pos, reward, self.done
 
-# Ejecutar el proceso de iteración de valor
-agent.value_iteration()
+# Example usage:
+env = FrozenLake(size=4, num_holes=3, seed=42)
 
-# Extraer la política óptima
-agent.extract_policy()
+# Reiniciar el entorno para obtener una nueva episodio
+agent_pos = env.reset()
 
-# Jugar episodios usando la política óptima y mostrar las recompensas
-rewards = agent.play_episodes()
-print("Recompensas de los episodios jugados usando la política óptima:")
-print(rewards)
+print("Initial grid:")
+print(env.grid)
+
+print("Agent starts at:", env.start)
+print("Goal is at:", env.goal)
+print("Holes are at:", env.holes)
+
+while not env.done:
+    action = np.random.randint(4)
+    new_pos, reward, done = env.step(action)
+    print("Agent's new position:", new_pos)
+    print("Reward received:", reward)
+    print("Episode done?", done)
+    print("Grid after action:")
+    print(env.grid)
+
+print("Episode finished!")
